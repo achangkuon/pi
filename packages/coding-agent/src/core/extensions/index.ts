@@ -167,6 +167,7 @@ export type {
 	TerminalInputHandler,
 	ThinkingLevelSelectEvent,
 	// Events - Tool
+	ToolCallAnnotation,
 	ToolCallEvent,
 	ToolCallEventResult,
 	// Tools

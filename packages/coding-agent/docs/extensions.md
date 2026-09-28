@@ -81,6 +81,7 @@ Automatic retries, recovery, compaction, or queued work can continue afterward.
 | Change active tools, model, or thinking level | Session control methods on `pi` |
 | Add a model provider | `pi.registerProvider()` |
 | Add terminal rendering | Renderer registration and `ctx.ui` |
+| Add presentation-only text to a tool call | `pi.registerToolCallAnnotation()` |
 | Communicate with another extension | `pi.events` |
 
 Use the exported declarations in [`extensions/types.ts`](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/src/core/extensions/types.ts) for exact event, context, tool, and result types.
@@ -142,6 +143,20 @@ File-mutating tools should wrap the complete read-modify-write operation with `w
 Truncate large model-facing results and tell the model where to read the complete output.
 
 See [`hello.ts`](../examples/extensions/hello.ts), [`todo.ts`](../examples/extensions/todo.ts), [`dynamic-tools.ts`](../examples/extensions/dynamic-tools.ts), and [`truncated-tool.ts`](../examples/extensions/truncated-tool.ts).
+
+### Annotate a tool call without replacing it
+
+`pi.registerToolCallAnnotation(toolName, callback)` adds optional plain text to the **call row** in the interactive TUI. It does not register a tool, change arguments or results, or add model-visible content. The callback runs synchronously with a separate immutable clone of the current call arguments; return one line of plain text or `undefined`:
+
+```typescript
+export default function (pi: ExtensionAPI) {
+  pi.registerToolCallAnnotation("read", (args) =>
+    typeof args.path === "string" ? " · local" : undefined
+  );
+}
+```
+
+Multiple registrations are considered in extension registration order. Empty, multiline, control-character, terminal-escape, or throwing results are omitted independently. Only complete entries fitting the available cells after the tool's own text and intentional spaces appear; entries never add lines or truncate the owner. Standard `Text` call renderers support this pre-padding slot automatically (including built-in `read`). Other components need to explicitly implement `InlineSuffixComponent` from `@earendil-works/pi-tui`; generic rendered strings are never inspected for apparent whitespace. A `Text` subclass that overrides `render()` must also explicitly provide a compatible `setInlineSuffixes()` implementation or it fails closed. Print, JSON, and RPC modes do not evaluate annotations.
 
 ### Activate tools dynamically
 

@@ -266,6 +266,13 @@ function snapshotEventHandlers(extensions: Extension[], event: ExtensionEvent["t
 	return extensions.map((ext) => ({ ext, handlers: ext.handlers.get(event)?.slice() ?? [] }));
 }
 
+function freezeAnnotationArgs(value: unknown, seen = new WeakSet<object>()): void {
+	if (typeof value !== "object" || value === null || seen.has(value)) return;
+	seen.add(value);
+	for (const child of Object.values(value)) freezeAnnotationArgs(child, seen);
+	Object.freeze(value);
+}
+
 function sameMessages(left: AgentMessage[], right: AgentMessage[]): boolean {
 	return left.length === right.length && left.every((message, index) => message === right[index]);
 }
@@ -581,6 +588,29 @@ export class ExtensionRunner {
 
 	getExtensionPaths(): string[] {
 		return this.extensions.map((e) => e.path);
+	}
+
+	/** Evaluate only presentation callbacks in TUI mode; each sees its own immutable argument snapshot. */
+	getToolCallAnnotations(toolName: string, args: unknown): string[] {
+		if (this.mode !== "tui" || this.staleMessage) return [];
+		const annotations: string[] = [];
+		for (const ext of this.extensions) {
+			for (const registration of ext.toolCallAnnotations ?? []) {
+				if (registration.toolName !== toolName) continue;
+				try {
+					const copy: unknown = structuredClone(args);
+					if (typeof copy !== "object" || copy === null || Array.isArray(copy)) continue;
+					freezeAnnotationArgs(copy);
+					const text: unknown = registration.callback(copy as Readonly<Record<string, unknown>>);
+					if (typeof text === "string" && text.trim() && !/[\p{C}\p{Zl}\p{Zp}]/u.test(text)) {
+						annotations.push(text);
+					}
+				} catch {
+					// Annotation failures never become chat rows or affect tool execution.
+				}
+			}
+		}
+		return annotations;
 	}
 
 	/** Get all registered tools from all extensions (first registration per name wins). */

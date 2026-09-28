@@ -162,6 +162,7 @@ export type {
 	SourceInfo,
 	TerminalInputHandler,
 	ThinkingLevelSelectEvent,
+	ToolCallAnnotation,
 	ToolCallEvent,
 	ToolCallEventResult,
 	ToolDefinition,
