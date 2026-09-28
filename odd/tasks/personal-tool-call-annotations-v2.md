@@ -48,12 +48,20 @@ No dependency, lockfile, package manifest, changelog, installed runtime, user se
 
 ## Task
 
-- [ ] Implement and verify the complete v2 textual tool-call annotation API as one accepted size-exception unit.
+- [x] Implement and verify the complete v2 textual tool-call annotation API as one accepted size-exception unit.
 
 ## Verification
 
-Pending. Repository policy requires targeted Vitest for each modified test file and full-output `npm run check`. Do not run `npm test` or a build unless Emilio explicitly requests it.
+- `bun test test/text-inline-suffix.test.ts` from `packages/tui`: 4/4 passed. The repository-prescribed Node test runner was unavailable because this host's Node 22.22.1 does not recognize `.ts` test files.
+- Targeted coding-agent Vitest: 108/108 passed.
+- `npm run check`: passed, including Biome, dependency/entry graph checks, shrinkwrap/install-lock checks, TypeScript typecheck, and browser smoke check.
+- `git diff --check`: passed.
+- Independent verifier: PASS, with the Node-runner limitation above preserved.
+- Native review `review-44c3659aaede7d9d`: approved and acknowledged for target `sha256:4bf25658a126edbf334a67bf431655a73ad1d9b70b3cf65f786850472ee9dd9d`; four advisory warnings were non-blocking.
 
 ## Evidence
 
-Pending.
+- Work-unit commit: `483b50c9afef70f89c136a7b469187682682fd09` (`feat(coding-agent,tui): add tool call annotations`).
+- The source commit contains the exact reviewed candidate.
+- This follow-up changes only this passive task record to capture the immutable commit and verification evidence.
+- No personal Pi installation or Control Tower consumer change has occurred yet.
