@@ -65,6 +65,120 @@ describe("ToolExecutionComponent parity", () => {
 		expect(component.render(120).join("\n")).toBe(rendered);
 	});
 
+	test("actual read and custom Text calls annotate at wide widths without changing results or narrow rows", () => {
+		for (const [index, definition] of [
+			createReadToolDefinition(process.cwd()),
+			{ ...createBaseToolDefinition("read"), renderCall: () => new Text("custom read", 0, 0) },
+		].entries()) {
+			const options = { getCallAnnotations: () => [" +first", " +second"] };
+			const component = new ToolExecutionComponent(
+				"read",
+				"annotated",
+				{ path: "notes.txt" },
+				options,
+				definition,
+				createFakeTui(),
+				process.cwd(),
+			);
+			const wide = stripAnsi(component.render(120).join("\n"));
+			expect(wide).toContain(" +first +second");
+			expect(wide).toContain(index === 0 ? "read notes.txt" : "custom read");
+			const narrow = stripAnsi(component.render(13).join("\n"));
+			expect(narrow).not.toContain("+first");
+			expect(narrow).not.toContain("+second");
+			component.updateResult({ content: [{ type: "text", text: "result" }], isError: false }, false);
+			component.setExpanded(true);
+			expect(stripAnsi(component.render(120).join("\n"))).toContain("result");
+		}
+	});
+
+	test("streams current arguments and uses the same annotation on historical construction", () => {
+		const argsSeen: unknown[] = [];
+		const options = {
+			getCallAnnotations: (_tool: string, args: unknown) => {
+				argsSeen.push(args);
+				return [` +${String((args as Readonly<Record<string, unknown>>).path)}`];
+			},
+		};
+		const definition = { ...createBaseToolDefinition(), renderCall: () => new Text("owner", 0, 0) };
+		const component = new ToolExecutionComponent(
+			"custom_tool",
+			"stream",
+			{ path: "one" },
+			options,
+			definition,
+			createFakeTui(),
+			process.cwd(),
+		);
+		expect(stripAnsi(component.render(60).join("\n"))).toContain(" +one");
+		component.updateArgs({ path: "two" });
+		expect(stripAnsi(component.render(60).join("\n"))).toContain(" +two");
+		const replay = new ToolExecutionComponent(
+			"custom_tool",
+			"replay",
+			{ path: "two" },
+			options,
+			definition,
+			createFakeTui(),
+			process.cwd(),
+		);
+		expect(stripAnsi(replay.render(60).join("\n"))).toContain(" +two");
+		expect(argsSeen.length).toBeGreaterThanOrEqual(3);
+	});
+
+	test("custom full-width components and overridden Text renderers fail closed", () => {
+		class FullWidth {
+			invalidate(): void {}
+			render(width: number): string[] {
+				return ["X".repeat(width)];
+			}
+		}
+		class OverriddenText extends Text {
+			override render(width: number): string[] {
+				return super.render(width);
+			}
+		}
+		for (const renderCall of [() => new FullWidth(), () => new OverriddenText("owner", 0, 0)]) {
+			const getCallAnnotations = vi.fn(() => [" +note"]);
+			const component = new ToolExecutionComponent(
+				"custom_tool",
+				"fail-closed",
+				{},
+				{ getCallAnnotations },
+				{ ...createBaseToolDefinition(), renderCall },
+				createFakeTui(),
+				process.cwd(),
+			);
+			expect(stripAnsi(component.render(40).join("\n"))).not.toContain("+note");
+			expect(getCallAnnotations).not.toHaveBeenCalled();
+		}
+	});
+
+	test("allows a custom component only when it explicitly implements the inline slot", () => {
+		class OptInCall {
+			private text = new Text("opt-in owner", 0, 0);
+			invalidate(): void {
+				this.text.invalidate();
+			}
+			setInlineSuffixes(suffixes: readonly string[], style: (text: string) => string): boolean {
+				return this.text.setInlineSuffixes(suffixes, style);
+			}
+			render(width: number): string[] {
+				return this.text.render(width);
+			}
+		}
+		const component = new ToolExecutionComponent(
+			"custom_tool",
+			"opt-in",
+			{},
+			{ getCallAnnotations: () => [" +note"] },
+			{ ...createBaseToolDefinition(), renderCall: () => new OptInCall() },
+			createFakeTui(),
+			process.cwd(),
+		);
+		expect(stripAnsi(component.render(40).join("\n"))).toContain("opt-in owner +note");
+	});
+
 	test("stacks custom call and result renderers like the old implementation", () => {
 		const toolDefinition: ToolDefinition = {
 			...createBaseToolDefinition(),

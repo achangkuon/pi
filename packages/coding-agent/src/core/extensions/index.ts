@@ -174,6 +174,7 @@ export type {
 	ThinkingLevelSelectEvent,
 	ToolAnnotations,
 	// Events - Tool
+	ToolCallAnnotation,
 	ToolCallEvent,
 	ToolCallEventResult,
 	// Tools

@@ -84,6 +84,7 @@ Automatic retries, recovery, compaction, or queued work can continue afterward.
 | Add an MCP server | `pi.registerMcpServer()` |
 | Route each request to a model | [`pi.registerVirtualModel()`](virtual-models.md) |
 | Add terminal rendering | Renderer registration and `ctx.ui` |
+| Add presentation-only text to a tool call | `pi.registerToolCallAnnotation()` |
 | Communicate with another extension | `pi.events` |
 
 Use the exported declarations in [`extensions/types.ts`](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/src/core/extensions/types.ts) for exact event, context, tool, and result types.
@@ -181,6 +182,20 @@ pi.on("tool_call", async (event, ctx) => {
 A tool that orchestrates other tools can adjust what the model sees while it is active with `prepareLoadout(loadout)`. It runs whenever the active tools change and receives the declared tools, the callable tools, and every registered tool with its exposure, namespace, and prompt guidelines. It returns replacement `descriptions` for declared tools (including its own) and `hiddenDeclarations`: active tools whose declarations requests leave out while they stay active and callable. The default system prompt leaves hidden tools out of its tool list and rules, and names no tool in the skills hint when the file reader is hidden, so the orchestrating tool should present their guidelines itself. `codemode` uses only this hook, `exposure`, `reachesTools`, and `ctx.executeTool()`, so another tool can implement the same behavior under a different name.
 
 A tool that reaches other tools declares which ones a call may reach with `reachesTools(input)`: `"all"`, or the words of the input that may name them, where a word refers to every tool or namespace whose name it contains. `codemode` returns `"all"` for scripts that search or list tools and the words of the script otherwise; `tool_search` always returns `"all"`. Extensions that register tools late use it from their `tool_call` handler to finish registering the tools a call needs before it runs, as the MCP extension does for servers that are still connecting. The MCP extension also activates `codemode` or `tool_search` for MCP tools only when the tool of that name declares `reachesTools`.
+
+### Annotate a tool call without replacing it
+
+`pi.registerToolCallAnnotation(toolName, callback)` adds optional plain text to the **call row** in the interactive TUI. It does not register a tool, change arguments or results, or add model-visible content. The callback runs synchronously with a separate immutable clone of the current call arguments; return one line of plain text or `undefined`:
+
+```typescript
+export default function (pi: ExtensionAPI) {
+  pi.registerToolCallAnnotation("read", (args) =>
+    typeof args.path === "string" ? " · local" : undefined
+  );
+}
+```
+
+Multiple registrations are considered in extension registration order. Empty, multiline, control-character, terminal-escape, or throwing results are omitted independently. Only complete entries fitting the available cells after the tool's own text and intentional spaces appear; entries never add lines or truncate the owner. Standard `Text` call renderers support this pre-padding slot automatically (including built-in `read`). Other components need to explicitly implement `InlineSuffixComponent` from `@earendil-works/pi-tui`; generic rendered strings are never inspected for apparent whitespace. A `Text` subclass that overrides `render()` must also explicitly provide a compatible `setInlineSuffixes()` implementation or it fails closed. Print, JSON, and RPC modes do not evaluate annotations.
 
 ### Activate tools dynamically
 
