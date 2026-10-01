@@ -1494,6 +1494,9 @@ export interface MarkdownTransformContext {
 
 export type MarkdownTransformer = (markdown: string, context: MarkdownTransformContext) => string;
 
+/** Presentation-only, synchronous text derived from cloned current call arguments. */
+export type ToolCallAnnotation = (args: Readonly<Record<string, unknown>>) => string | undefined;
+
 export interface EntryRenderOptions {
 	expanded: boolean;
 }
@@ -1614,6 +1617,9 @@ export interface ExtensionAPI {
 	// =========================================================================
 	// Tool Registration
 	// =========================================================================
+
+	/** Add optional plain, single-line text to a tool's TUI call row without registering or replacing the tool. */
+	registerToolCallAnnotation(toolName: string, callback: ToolCallAnnotation): void;
 
 	/** Register a tool that the LLM can call. */
 	registerTool<TParams extends TSchema = TSchema, TDetails = unknown, TState = any>(
@@ -2216,6 +2222,7 @@ export interface Extension {
 	sourceInfo: SourceInfo;
 	handlers: Map<string, HandlerFn[]>;
 	tools: Map<string, RegisteredTool>;
+	toolCallAnnotations?: Array<{ toolName: string; callback: ToolCallAnnotation }>;
 	messageRenderers: Map<string, MessageRenderer>;
 	markdownTransformer?: MarkdownTransformer;
 	entryRenderers?: Map<string, EntryRenderer>;

@@ -1,14 +1,21 @@
 import type { Component } from "../tui.ts";
 import { applyBackgroundToLine, flattenLines, visibleWidth, wrapTextWithAnsi } from "../utils.ts";
 
+/** Opt-in pre-padding slot for textual call renderers. Non-text components have no implicit capacity. */
+export interface InlineSuffixComponent extends Component {
+	setInlineSuffixes(suffixes: readonly string[], style: (text: string) => string): boolean;
+}
+
 /**
  * Text component - displays multi-line text with word wrapping
  */
-export class Text implements Component {
+export class Text implements InlineSuffixComponent {
 	private text: string;
 	private paddingX: number; // Left/right padding
 	private paddingY: number; // Top/bottom padding
 	private customBgFn?: (text: string) => string;
+	private inlineSuffixes: readonly string[] = [];
+	private inlineSuffixStyle?: (text: string) => string;
 
 	// Cache for rendered output
 	private cachedText?: string;
@@ -42,6 +49,15 @@ export class Text implements Component {
 		this.cachedLines = undefined;
 	}
 
+	/** Refuse subclasses with a different renderer unless they explicitly override this slot contract. */
+	setInlineSuffixes(suffixes: readonly string[], style: (text: string) => string): boolean {
+		if (this.render !== Text.prototype.render) return false;
+		this.inlineSuffixes = suffixes;
+		this.inlineSuffixStyle = style;
+		this.invalidate();
+		return true;
+	}
+
 	render(width: number): string[] {
 		// Check cache
 		if (this.cachedLines && this.cachedText === this.text && this.cachedWidth === width) {
@@ -72,9 +88,24 @@ export class Text implements Component {
 		const rightMargin = " ".repeat(paddingX);
 		const contentLines: string[] = [];
 
-		for (const line of wrappedLines) {
+		for (const [index, line] of wrappedLines.entries()) {
+			let content = line;
+			if (index === wrappedLines.length - 1 && this.inlineSuffixStyle) {
+				let available = contentWidth - visibleWidth(line);
+				const accepted: string[] = [];
+				for (const suffix of this.inlineSuffixes) {
+					const cells = visibleWidth(suffix);
+					if (cells <= 0 || cells > available) continue;
+					accepted.push(suffix);
+					available -= cells;
+				}
+				if (accepted.length > 0) {
+					// Isolate both OSC-8 links and SGR styles before and after the annotation.
+					content += `\x1b]8;;\x1b\\\x1b[0m${this.inlineSuffixStyle(accepted.join(""))}\x1b]8;;\x1b\\\x1b[0m`;
+				}
+			}
 			// Add margins
-			const lineWithMargins = leftMargin + line + rightMargin;
+			const lineWithMargins = leftMargin + content + rightMargin;
 
 			// Apply background if specified (this also pads to full width)
 			if (this.customBgFn) {

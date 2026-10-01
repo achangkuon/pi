@@ -285,6 +285,12 @@ function createExtensionAPI(
 			};
 		},
 
+		registerToolCallAnnotation(toolName, callback): void {
+			assertActive();
+			extension.toolCallAnnotations ??= [];
+			extension.toolCallAnnotations.push({ toolName, callback });
+		},
+
 		registerTool(tool: ToolDefinition): void {
 			assertActive();
 			if (typeof tool.parameters !== "object" || tool.parameters === null || Array.isArray(tool.parameters)) {
@@ -595,6 +601,7 @@ function createExtension(extensionPath: string, resolvedPath: string): Extension
 		sourceInfo: createSyntheticSourceInfo(extensionPath, { source, baseDir }),
 		handlers: new Map(),
 		tools: new Map(),
+		toolCallAnnotations: [],
 		messageRenderers: new Map(),
 		entryRenderers: new Map(),
 		commands: new Map(),

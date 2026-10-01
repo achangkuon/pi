@@ -5,6 +5,7 @@ import {
 	Container,
 	getCapabilities,
 	Image,
+	type InlineSuffixComponent,
 	MouseRegion,
 	Spacer,
 	Text,
@@ -42,6 +43,8 @@ const FALLBACK_PREVIEW_LINES = 10;
 export interface ToolExecutionOptions {
 	showImages?: boolean;
 	imageWidthCells?: number;
+	/** TUI-only presentation callback supplied by the active extension runtime. */
+	getCallAnnotations?: (toolName: string, args: unknown) => string[];
 }
 
 export class ToolExecutionComponent extends Container {
@@ -63,6 +66,7 @@ export class ToolExecutionComponent extends Container {
 	private imageWidthCells: number;
 	private isPartial = true;
 	private toolDefinition?: ToolRenderers;
+	private getCallAnnotations?: ToolExecutionOptions["getCallAnnotations"];
 	private ui: TUI;
 	private cwd: string;
 	private executionStarted = false;
@@ -92,6 +96,7 @@ export class ToolExecutionComponent extends Container {
 		this.toolCallId = toolCallId;
 		this.args = args;
 		this.toolDefinition = toolDefinition;
+		this.getCallAnnotations = options.getCallAnnotations;
 		this.showImages = options.showImages ?? true;
 		this.imageWidthCells = options.imageWidthCells ?? 60;
 		this.ui = ui;
@@ -150,6 +155,21 @@ export class ToolExecutionComponent extends Container {
 			showImages: this.showImages,
 			isError: this.result?.isError ?? false,
 		};
+	}
+
+	private annotateCall(component: Component): Component {
+		if (!this.getCallAnnotations || !("setInlineSuffixes" in component)) return component;
+		const slot = component as InlineSuffixComponent;
+		if (typeof slot.setInlineSuffixes !== "function") return component;
+		const style = (text: string) => theme.fg("muted", text);
+		try {
+			if (slot.setInlineSuffixes([], style)) {
+				slot.setInlineSuffixes(this.getCallAnnotations(this.toolName, this.args), style);
+			}
+		} catch {
+			// A broken optional presentation slot must not break the owner renderer.
+		}
+		return component;
 	}
 
 	private createCallFallback(): Component {
@@ -322,17 +342,17 @@ export class ToolExecutionComponent extends Container {
 
 			const callRenderer = this.getCallRenderer();
 			if (!callRenderer) {
-				renderContainer.addChild(this.createResultRegion(this.createCallFallback()));
+				renderContainer.addChild(this.createResultRegion(this.annotateCall(this.createCallFallback())));
 				hasContent = true;
 			} else {
 				try {
 					const component = callRenderer(this.args, theme, this.getRenderContext(this.callRendererComponent));
 					this.callRendererComponent = component;
-					renderContainer.addChild(this.createResultRegion(component));
+					renderContainer.addChild(this.createResultRegion(this.annotateCall(component)));
 					hasContent = true;
 				} catch {
 					this.callRendererComponent = undefined;
-					renderContainer.addChild(this.createResultRegion(this.createCallFallback()));
+					renderContainer.addChild(this.createResultRegion(this.annotateCall(this.createCallFallback())));
 					hasContent = true;
 				}
 			}
