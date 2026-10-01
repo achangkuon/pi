@@ -3537,6 +3537,8 @@ export class InteractiveMode {
 										showImages: this.settingsManager.getShowImages(),
 										imageWidthCells: this.settingsManager.getImageWidthCells(),
 										outputPad: this.outputPad,
+										getCallAnnotations: (name, args) =>
+											this.session.extensionRunner.getToolCallAnnotations(name, args),
 									},
 									this.getRegisteredToolDefinition(content.name),
 									this.ui,
@@ -3616,6 +3618,8 @@ export class InteractiveMode {
 							showImages: this.settingsManager.getShowImages(),
 							imageWidthCells: this.settingsManager.getImageWidthCells(),
 							outputPad: this.outputPad,
+							getCallAnnotations: (name, args) =>
+								this.session.extensionRunner.getToolCallAnnotations(name, args),
 						},
 						this.getRegisteredToolDefinition(event.toolName),
 						this.ui,
@@ -4034,6 +4038,8 @@ export class InteractiveMode {
 								showImages: this.settingsManager.getShowImages(),
 								imageWidthCells: this.settingsManager.getImageWidthCells(),
 								outputPad: this.outputPad,
+								getCallAnnotations: (name, args) =>
+									this.session.extensionRunner.getToolCallAnnotations(name, args),
 							},
 							this.getRegisteredToolDefinition(content.name),
 							this.ui,

@@ -374,6 +374,109 @@ describe("ExtensionRunner", () => {
 		});
 	});
 
+	describe("tool-call annotations", () => {
+		it("composes registrations in extension order without registering tools or exposing mutable arguments", async () => {
+			const runtime = createExtensionRuntime();
+			const args = { path: "before", nested: { value: 1 } };
+			const observed: unknown[] = [];
+			const first = await loadExtensionFromFactory(
+				(pi) => {
+					pi.registerToolCallAnnotation("read", (input) => {
+						observed.push(input);
+						try {
+							(input as { path: string }).path = "changed";
+						} catch {
+							/* immutable */
+						}
+						try {
+							(input.nested as { value: number }).value = 2;
+						} catch {
+							/* immutable */
+						}
+						return "first";
+					});
+					pi.registerToolCallAnnotation("read", (input) => {
+						expect(input).toEqual(args);
+						return "second";
+					});
+				},
+				tempDir,
+				createEventBus(),
+				runtime,
+			);
+			const second = await loadExtensionFromFactory(
+				(pi) => {
+					pi.registerToolCallAnnotation("read", () => "third");
+				},
+				tempDir,
+				createEventBus(),
+				runtime,
+			);
+			const runner = new ExtensionRunner([first, second], runtime, tempDir, sessionManager, modelRegistry);
+			runner.setUIContext({} as ExtensionUIContext, "tui");
+			expect(runner.getAllRegisteredTools()).toEqual([]);
+			expect(runner.getToolCallAnnotations("read", args)).toEqual(["first", "second", "third"]);
+			expect(args).toEqual({ path: "before", nested: { value: 1 } });
+			expect(observed[0]).not.toBe(args);
+			expect(runner.getToolCallAnnotations("bash", args)).toEqual([]);
+			runner.setUIContext(undefined, "print");
+			expect(runner.getToolCallAnnotations("read", args)).toEqual([]);
+		});
+
+		it.each(["", "\n", "a\nb", "a\r", "\x1b[31mred", "\x1b]8;;url\x07link", "\x7f", "\u2028", "\u009b"])(
+			"rejects unsafe annotation %j independently",
+			async (unsafe) => {
+				const runtime = createExtensionRuntime();
+				const ext = await loadExtensionFromFactory(
+					(pi) => {
+						pi.registerToolCallAnnotation("read", () => unsafe);
+						pi.registerToolCallAnnotation("read", () => {
+							throw new Error("silent failure");
+						});
+						pi.registerToolCallAnnotation("read", () => "safe");
+					},
+					tempDir,
+					createEventBus(),
+					runtime,
+				);
+				const runner = new ExtensionRunner([ext], runtime, tempDir, sessionManager, modelRegistry);
+				runner.setUIContext({} as ExtensionUIContext, "tui");
+				const errors = vi.fn();
+				runner.onError(errors);
+				expect(runner.getToolCallAnnotations("read", {})).toEqual(["safe"]);
+				expect(errors).not.toHaveBeenCalled();
+			},
+		);
+
+		it("discards failed factories and invalidates old registrations on reload", async () => {
+			const runtime = createExtensionRuntime();
+			await expect(
+				loadExtensionFromFactory(
+					(pi) => {
+						pi.registerToolCallAnnotation("read", () => "failed");
+						throw new Error("factory failed");
+					},
+					tempDir,
+					createEventBus(),
+					runtime,
+				),
+			).rejects.toThrow("factory failed");
+			const ext = await loadExtensionFromFactory(
+				(pi) => {
+					pi.registerToolCallAnnotation("read", () => "current");
+				},
+				tempDir,
+				createEventBus(),
+				runtime,
+			);
+			const runner = new ExtensionRunner([ext], runtime, tempDir, sessionManager, modelRegistry);
+			runner.setUIContext({} as ExtensionUIContext, "tui");
+			expect(runner.getToolCallAnnotations("read", {})).toEqual(["current"]);
+			runner.invalidate();
+			expect(runner.getToolCallAnnotations("read", {})).toEqual([]);
+		});
+	});
+
 	describe("tool collection", () => {
 		it("collects tools from multiple extensions", async () => {
 			const toolCode = (name: string) => `
